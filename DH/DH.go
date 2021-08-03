@@ -5,10 +5,11 @@ import (
 	"math/rand"
 	"time"
 
-	bigintegers "example.com/DiffieHellmanGO/BigIntegers"
+	bigintegers "github.com/Agilen/MessangerP2P/BigIntegers"
 )
 
 func GenRandomNum(size int) []uint64 {
+
 	if size <= 0 {
 		println("Size is bellow zero or zero")
 		log.Fatal()
@@ -25,19 +26,4 @@ func GenRandomNum(size int) []uint64 {
 
 func PowMod(a []uint64, pow []uint64, p []uint64) []uint64 {
 	return bigintegers.LongModPowerBarrett(a, pow, p)
-}
-
-func testDH() ([]uint64, []uint64) {
-
-	a := GenRandomNum(2)
-	b := GenRandomNum(2)
-	g := GenRandomNum(2)
-	p := GenRandomNum(2)
-	A := PowMod(g, a, p)
-	B := PowMod(g, b, p)
-	S1 := PowMod(B, a, p)
-	S2 := PowMod(A, b, p)
-
-	return S1, S2
-
 }
