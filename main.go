@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/user"
 	"strconv"
+	"strings"
 	"sync"
 
 	bigintegers "github.com/Agilen/MessangerP2P/BigIntegers"
@@ -17,97 +18,120 @@ type Info struct {
 	Name         string
 	UrPort       int
 	PortToCon    int
+	G            []uint64
 	UrSecret     []uint64
 	PublicSecret []uint64
-	P            []uint64
-	G            []uint64
-	S            []uint64
+	Module       []uint64
+	SharedSecret []uint64
+	connection   net.Conn
 }
 
 var info Info
 
 func main() {
-
-	// var name string
-	// var port int
-	// var portTo int
-	// // fmt.Print("Enter your nick:")
-	// // fmt.Fscan(os.Stdin, &name)
-	// // fmt.Print("Enter your port:")
-	// // fmt.Fscan(os.Stdin, &port)
-	// // fmt.Print("Enter port to con:")
-	// // fmt.Fscan(os.Stdin, &portTo)
-	// // info.Name = name
-	// // info.UrPort = port
-	// // info.PortToCon = portTo
-
-	l := make(chan net.Conn)
-	c := make(chan net.Conn)
-
-	go listen(l)
-	go connection(c)
-	conn, con := <-l, <-c
-	// SendInfo(con)
 	var wg sync.WaitGroup
-	fmt.Println("Ready to chat")
-	SendInfo(con)
+	wg.Add(1)
+	go Listen(&wg)
+	go SendRequest(&wg)
+	wg.Wait()
+	go Write()
+	Read()
+
+}
+
+func Listen(wg *sync.WaitGroup) {
+	listener, _ := net.Listen("tcp", ":8000")
+
 	for {
-		wg.Add(1)
-		go Write(con, &wg)
-		go Read(conn, &wg)
-
-		wg.Wait()
+		conn, err := listener.Accept()
+		if err != nil {
+			continue
+		}
+		go onConnection(conn)
+		wg.Done()
 	}
 }
-func listen(c chan net.Conn) {
-	// ln, _ := net.Listen("tcp", "192.168.0.106:8000")
-	ln, _ := net.Listen("tcp", ":"+strconv.Itoa(info.UrPort))
 
-	conn, _ := ln.Accept()
-	for conn == nil {
-		conn, _ = ln.Accept()
+func SendRequest(wg *sync.WaitGroup) {
+	connection, _ := net.Dial("tcp", ":8001")
+	for connection == nil {
+		connection, _ = net.Dial("tcp", ":8001")
 	}
+	info.connection = connection
+	data := DataPreparation()
 
-	fmt.Println("Port has been open")
-	c <- conn
-}
-func connection(c chan net.Conn) {
-	// con, _ := net.Dial("tcp", "192.168.0.105:8000")
-	// for con == nil {
-	// 	con, _ = net.Dial("tcp", "192.168.0.105:8000")
-	// }
-	con, _ := net.Dial("tcp", ":"+strconv.Itoa(info.PortToCon))
-	for con == nil {
-		con, _ = net.Dial("tcp", ":"+strconv.Itoa(info.PortToCon))
-	}
-	fmt.Println("Conected")
-	c <- con
-}
-func Write(con net.Conn, wg *sync.WaitGroup) {
+	connection.Write([]byte(data + "\n"))
+	fmt.Println("запрос отправлен")
 
-	reader := bufio.NewReader(os.Stdin)
-	text, _ := reader.ReadString('\n')
-	if text != "" {
-		fmt.Fprintf(con, text+"\n")
-		fmt.Print("You: ", text)
-	}
+	message, _ := bufio.NewReader(connection).ReadString('\n')
+	fmt.Println("получен ответ")
+	buffer := strings.Fields(message)
+	h := bigintegers.ReadHex(buffer[1])
+	info.SharedSecret = bigintegers.LongModPowerBarrett(h, info.UrSecret, info.Module)
+
+	fmt.Println(
+		"\nUrSecret: ", bigintegers.ToHex(info.UrSecret),
+		"\nG:", bigintegers.ToHex(info.G),
+		"\nModule:", bigintegers.ToHex(info.Module),
+		"\nPublicSecret:", bigintegers.ToHex(info.PublicSecret),
+		"\nSharedSecret:", bigintegers.ToHex(info.SharedSecret),
+	)
 	wg.Done()
 }
-func Read(conn net.Conn, wg *sync.WaitGroup) {
+func onConnection(conn net.Conn) { // обработка запроса
+	fmt.Printf("New connection from: %v", conn.RemoteAddr().String())
+	info.connection = conn
 	message, _ := bufio.NewReader(conn).ReadString('\n')
-	if message != "" {
-		fmt.Print("Message from 8001: " + message)
-	}
+	fmt.Println("Получен запрос")
+	buffer := strings.Fields(message) //len 6
+	info.G = bigintegers.ReadHex(buffer[4])
+	info.Module = bigintegers.ReadHex(buffer[5])
+	H := bigintegers.ReadHex(buffer[3])
+	info.UrSecret = dh.GenRandomNum(2)
+	info.PublicSecret = bigintegers.LongModPowerBarrett(info.G, info.UrSecret, info.Module)
+	info.SharedSecret = bigintegers.LongModPowerBarrett(H, info.UrSecret, info.Module)
 
-	wg.Done()
+	response := info.Name + " " + bigintegers.ToHex(info.PublicSecret)
+
+	conn.Write([]byte(response + "\n"))
+	fmt.Println("Отправлен ответ")
+
+	fmt.Println(
+		"\nUrSecret: ", bigintegers.ToHex(info.UrSecret),
+		"\nG:", bigintegers.ToHex(info.G),
+		"\nModule:", bigintegers.ToHex(info.Module),
+		"\nPublicSecret:", bigintegers.ToHex(info.PublicSecret),
+		"\nSharedSecret:", bigintegers.ToHex(info.SharedSecret),
+	)
 }
-func SendInfo(con net.Conn) {
-	info.UrSecret = dh.GenRandomNum(16)
-	info.G = dh.GenRandomNum(16)
-	info.P = dh.GenRandomNum(16)
-	info.PublicSecret = bigintegers.LongModPowerBarrett(info.G, info.UrSecret, info.P)
-	fmt.Fprintf(con, info.Name+" "+bigintegers.ToHex(info.G)+" "+bigintegers.ToHex(info.P)+" "+bigintegers.ToHex(info.PublicSecret))
-	fmt.Fprintf(con, " ")
+func DataPreparation() string { // Подготовка данных для запроса на подключение
+	info.UrSecret = dh.GenRandomNum(2)
+	info.Module = dh.GenRandomNum(2)
+	info.G = dh.GenRandomNum(2)
+	info.PublicSecret = bigintegers.LongModPowerBarrett(info.G, info.UrSecret, info.Module)
+
+	data := "Hello " + info.Name + " " + strconv.Itoa(info.UrPort) + " " + bigintegers.ToHex(info.PublicSecret) + " " + bigintegers.ToHex(info.G) + " " + bigintegers.ToHex(info.Module)
+
+	return data
+}
+func Write() {
+	for {
+		if info.connection != nil {
+			fmt.Println("Write")
+			reader := bufio.NewReader(os.Stdin)
+			text, _ := reader.ReadString('\n')
+			info.connection.Write([]byte(text + "\n"))
+		}
+	}
+}
+func Read() {
+	for {
+		if info.connection != nil {
+			fmt.Println("Read")
+			message, _ := bufio.NewReader(info.connection).ReadString('\n')
+			fmt.Print("Message from 8001: " + message)
+		}
+	}
 }
 func init() {
 	curUser, _ := user.Current()
