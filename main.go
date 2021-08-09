@@ -2,15 +2,8 @@ package main
 
 import (
 	"bufio"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -19,10 +12,10 @@ import (
 	"sync"
 	"time"
 
+	crpt "github.com/Agilen/MessangerP2P/AES-128"
 	bigintegers "github.com/Agilen/MessangerP2P/BigIntegers"
 	dh "github.com/Agilen/MessangerP2P/DH"
 	"github.com/urfave/cli"
-	"golang.org/x/crypto/pbkdf2"
 )
 
 type Message struct {
@@ -103,8 +96,8 @@ func Listen(wg *sync.WaitGroup) {
 		if err != nil {
 			continue
 		}
-		go onConnection(conn)
-		wg.Done()
+		go onConnection(conn, wg)
+
 	}
 }
 func SendRequest(wg *sync.WaitGroup) {
@@ -140,7 +133,7 @@ func SendRequest(wg *sync.WaitGroup) {
 	)
 	wg.Done()
 }
-func onConnection(conn net.Conn) { // обработка запроса
+func onConnection(conn net.Conn, wg *sync.WaitGroup) { // обработка запроса
 	fmt.Printf("New connection from: %v", conn.RemoteAddr().String())
 	info.connection = conn
 	message, _ := bufio.NewReader(conn).ReadString('\n') //жду запрос
@@ -178,6 +171,7 @@ func onConnection(conn net.Conn) { // обработка запроса
 	fmt.Println(
 		"\nSharedSecret:", dhInfo.SharedSecret,
 	)
+	wg.Done()
 }
 func DataPreparation() string { // Подготовка данных для запроса на подключение
 	dhInfo.UrSecret = bigintegers.ToHex(dh.GenRandomNum(2))
@@ -199,15 +193,14 @@ func DataPreparation() string { // Подготовка данных для за
 	data := string(json_data) + " " + string(json_peerData)
 	return data
 }
-
 func Write() {
 	for {
 		if info.connection != nil {
 
 			reader := bufio.NewReader(os.Stdin)
 			text, _ := reader.ReadString('\n')
-			key, salt := deriveKey(dhInfo.SharedSecret, nil)
-			textTosend, _ := encrypt(key, text)
+			key, salt := crpt.DeriveKey(dhInfo.SharedSecret, nil)
+			textTosend, _ := crpt.Encrypt(key, text)
 			fmt.Println("enc textToSend:", textTosend)
 			send := Message{textTosend, (salt)}
 			json_data, err := json.Marshal(send)
@@ -233,77 +226,13 @@ func Read() {
 			}
 			fmt.Println("i got it")
 
-			key, _ := deriveKey(dhInfo.SharedSecret, mes.Salt)
+			key, _ := crpt.DeriveKey(dhInfo.SharedSecret, mes.Salt)
 			fmt.Println("message to ddec", message)
-			messageToRead, _ := decrypt(key, mes.Message)
+			messageToRead, _ := crpt.Decrypt(key, mes.Message)
 			fmt.Println("decr mes", messageToRead)
 			fmt.Println(key)
 			fmt.Println(mes.Salt)
 			fmt.Print(peer.Name + ":" + messageToRead)
 		}
 	}
-}
-
-func encrypt(key []byte, message string) (encmess string, err error) {
-	plainText := []byte(message)
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return
-	}
-
-	cipherText := make([]byte, aes.BlockSize+len(plainText))
-	iv := cipherText[:aes.BlockSize]
-	fmt.Println(len(iv))
-
-	if _, err = io.ReadFull(rand.Reader, iv); err != nil {
-		return
-	}
-
-	stream := cipher.NewCFBEncrypter(block, iv)
-	stream.XORKeyStream(cipherText[aes.BlockSize:], plainText)
-
-	encmess = base64.URLEncoding.EncodeToString(cipherText)
-	return
-}
-
-func decrypt(key []byte, securemess string) (decodedmess string, err error) {
-	fmt.Println(securemess)
-
-	cipherText, err := base64.URLEncoding.DecodeString(securemess)
-	fmt.Println("promlem is here")
-	if err != nil {
-		log.Print(err)
-		return
-	}
-	fmt.Println("234567")
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return
-	}
-	fmt.Println("12345")
-	if len(cipherText) < aes.BlockSize {
-		err = errors.New("Ciphertext block size is too short!")
-		return
-	}
-	fmt.Println("sdfg")
-	iv := cipherText[:aes.BlockSize]
-	cipherText = cipherText[aes.BlockSize:]
-
-	stream := cipher.NewCFBDecrypter(block, iv)
-
-	stream.XORKeyStream(cipherText, cipherText)
-
-	decodedmess = string(cipherText)
-	return
-}
-
-func deriveKey(passphrase string, salt []byte) ([]byte, []byte) {
-	if salt == nil {
-		salt = make([]byte, 8)
-		// http://www.ietf.org/rfc/rfc2898.txt
-		// Salt.
-		rand.Read(salt)
-	}
-	return pbkdf2.Key([]byte(passphrase), salt, 1000, 16, sha256.New), salt
 }

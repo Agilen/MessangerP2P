@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 )
 
-func encrypt(key []byte, message string) (encmess string, err error) {
+func Encrypt(key []byte, message string) (encmess string, err error) {
 	plainText := []byte(message)
 
 	block, err := aes.NewCipher(key)
@@ -38,7 +38,7 @@ func encrypt(key []byte, message string) (encmess string, err error) {
 	return
 }
 
-func decrypt(key []byte, securemess string) (decodedmess string, err error) {
+func Decrypt(key []byte, securemess string) (decodedmess string, err error) {
 	fmt.Println(securemess)
 
 	cipherText, err := base64.URLEncoding.DecodeString(securemess)
@@ -69,11 +69,9 @@ func decrypt(key []byte, securemess string) (decodedmess string, err error) {
 	return
 }
 
-func deriveKey(passphrase string, salt []byte) ([]byte, []byte) {
+func DeriveKey(passphrase string, salt []byte) ([]byte, []byte) {
 	if salt == nil {
 		salt = make([]byte, 8)
-		// http://www.ietf.org/rfc/rfc2898.txt
-		// Salt.
 		rand.Read(salt)
 	}
 	return pbkdf2.Key([]byte(passphrase), salt, 1000, 16, sha256.New), salt
