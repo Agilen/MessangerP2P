@@ -27,6 +27,7 @@ func encrypt(key []byte, message string) (encmess string, err error) {
 	fmt.Println(len(iv))
 
 	if _, err = io.ReadFull(rand.Reader, iv); err != nil {
+
 		return
 	}
 
