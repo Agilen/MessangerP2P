@@ -2,8 +2,15 @@ package main
 
 import (
 	"bufio"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -12,26 +19,17 @@ import (
 	"sync"
 	"time"
 
-	crpt "github.com/Agilen/MessangerP2P/AES-128"
 	bigintegers "github.com/Agilen/MessangerP2P/BigIntegers"
 	dh "github.com/Agilen/MessangerP2P/DH"
 	"github.com/urfave/cli"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 type Message struct {
 	Message string
 	Salt    []byte
 }
-type DH struct {
-	UrSecret     string
-	SharedSecret string
-	Params       DHParams
-}
-type DHParams struct {
-	PublicSecret string
-	Module       string
-	G            string
-}
+
 type Peer struct {
 	Name string
 }
@@ -46,7 +44,6 @@ type Info struct {
 var mes Message
 var info Info
 var peer Peer
-var dhInfo DH
 
 func init() {
 	info = Info{
@@ -73,22 +70,22 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println(info.UrPort, info.PortToCon, info, info.Name)
-
+	var dhInfo dh.DHContext
 	var wg sync.WaitGroup
 	fmt.Println("Welcom")
 	time.Sleep(1000)
 	wg.Add(1)
-	go Listen(&wg)
+	go Listen(&wg, &dhInfo)
 	if info.PortToCon != 0 {
-		go SendRequest(&wg)
+		go SendRequest(&wg, &dhInfo)
 	}
 	time.Sleep(1000)
 	wg.Wait()
-	go Write()
-	Read()
+	go Write(&dhInfo)
+	Read(&dhInfo)
 }
 
-func Listen(wg *sync.WaitGroup) {
+func Listen(wg *sync.WaitGroup, dhInfo *dh.DHContext) {
 	listener, _ := net.Listen("tcp", ":"+strconv.Itoa(info.UrPort))
 
 	for {
@@ -96,18 +93,19 @@ func Listen(wg *sync.WaitGroup) {
 		if err != nil {
 			continue
 		}
-		go onConnection(conn, wg)
+		go onConnection(conn, wg, dhInfo)
 
 	}
 }
-func SendRequest(wg *sync.WaitGroup) {
+func SendRequest(wg *sync.WaitGroup, dhInfo *dh.DHContext) {
+
 	connection, _ := net.Dial("tcp", ":"+strconv.Itoa(info.PortToCon))
 	for connection == nil {
 		connection, _ = net.Dial("tcp", ":"+strconv.Itoa(info.PortToCon))
 	}
 	info.connection = connection
-	data := DataPreparation()
-
+	data := DataPreparation(dhInfo)
+	fmt.Println([]byte(data + "\n"))
 	connection.Write([]byte(data + "\n"))
 
 	message, _ := bufio.NewReader(connection).ReadString('\n')
@@ -120,27 +118,26 @@ func SendRequest(wg *sync.WaitGroup) {
 
 		log.Fatal(err)
 	}
-	err = json.Unmarshal(response, &dhInfo.Params)
+	err = json.Unmarshal(response, &dhInfo.DHParams)
 	if err != nil {
 
 		log.Fatal(err)
 	}
-
-	dhInfo.SharedSecret = bigintegers.ToHex(bigintegers.LongModPowerBarrett(bigintegers.ReadHex(dhInfo.Params.PublicSecret), bigintegers.ReadHex(dhInfo.UrSecret), bigintegers.ReadHex(dhInfo.Params.Module)))
-
+	dhInfo.CalculateSharedSecret()
 	fmt.Println(
 		"\nSharedSecret:", dhInfo.SharedSecret,
 	)
 	wg.Done()
 }
-func onConnection(conn net.Conn, wg *sync.WaitGroup) { // обработка запроса
+func onConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh.DHContext) { // обработка запроса
 	fmt.Printf("New connection from: %v", conn.RemoteAddr().String())
 	info.connection = conn
+
 	message, _ := bufio.NewReader(conn).ReadString('\n') //жду запрос
 	M := strings.Fields(message)
 	data := []byte(M[0])
 	peerData := []byte(M[1])
-	err := json.Unmarshal(data, &dhInfo.Params)
+	err := json.Unmarshal(data, &dhInfo.DHParams)
 	if err != nil {
 
 		log.Fatal(err)
@@ -150,11 +147,11 @@ func onConnection(conn net.Conn, wg *sync.WaitGroup) { // обработка з�
 
 		log.Fatal(err)
 	}
-	dhInfo.UrSecret = bigintegers.ToHex(dh.GenRandomNum(2))
-	dhInfo.SharedSecret = bigintegers.ToHex(bigintegers.LongModPowerBarrett(bigintegers.ReadHex(dhInfo.Params.PublicSecret), bigintegers.ReadHex(dhInfo.UrSecret), bigintegers.ReadHex(dhInfo.Params.Module)))
-	dhInfo.Params.PublicSecret = bigintegers.ToHex(bigintegers.LongModPowerBarrett(bigintegers.ReadHex(dhInfo.Params.G), bigintegers.ReadHex(dhInfo.UrSecret), bigintegers.ReadHex(dhInfo.Params.Module)))
+	dhInfo.GenerateDHPrivateKey()
+	dhInfo.CalculateSharedSecret()
+	dhInfo.CalculateDHPublicKey()
 
-	r := DHParams{dhInfo.Params.PublicSecret, dhInfo.Params.Module, dhInfo.Params.G}
+	r := dh.Params{dhInfo.DHParams.G, dhInfo.DHParams.P, dhInfo.DHParams.PublicKey}
 	json_data, err := json.Marshal(r)
 	if err != nil {
 		log.Fatal(err)
@@ -173,34 +170,34 @@ func onConnection(conn net.Conn, wg *sync.WaitGroup) { // обработка з�
 	)
 	wg.Done()
 }
-func DataPreparation() string { // Подготовка данных для запроса на подключение
-	dhInfo.UrSecret = bigintegers.ToHex(dh.GenRandomNum(2))
-	dhInfo.Params.Module = bigintegers.ToHex(dh.GenRandomNum(2))
-	dhInfo.Params.G = bigintegers.ToHex(dh.GenRandomNum(2))
-	dhInfo.Params.PublicSecret = bigintegers.ToHex(bigintegers.LongModPowerBarrett(bigintegers.ReadHex(dhInfo.Params.G), bigintegers.ReadHex(dhInfo.UrSecret), bigintegers.ReadHex(dhInfo.Params.Module)))
+func DataPreparation(dhInfo *dh.DHContext) string { // Подготовка данных для запроса на подключение
+	dhInfo = dh.NewDHContext()
+	dhInfo.GenerateDHPrivateKey()
+	dhInfo.CalculateDHPublicKey()
 
-	// data := "Hello " + info.Name + " " + strconv.Itoa(info.UrPort) + " " + dhInfo.Params.PublicSecret + " " + dhInfo.Params.G + " " + dhInfo.Params.Module
-	dh := DHParams{dhInfo.Params.PublicSecret, dhInfo.Params.Module, dhInfo.Params.G}
+	dh := dh.Params{dhInfo.DHParams.G, dhInfo.DHParams.P, dhInfo.DHParams.PublicKey}
 	json_data, err := json.Marshal(dh)
 	if err != nil {
 		log.Fatal(err)
 	}
-	pr := Peer{info.Name}
-	json_peerData, err := json.Marshal(pr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	data := string(json_data) + " " + string(json_peerData)
+	// pr := Peer{info.Name}
+	// json_peerData, err := json.Marshal(pr)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	data := string(json_data)
+	fmt.Println(data)
 	return data
 }
-func Write() {
+
+func Write(dhInfo *dh.DHContext) {
 	for {
 		if info.connection != nil {
 
 			reader := bufio.NewReader(os.Stdin)
 			text, _ := reader.ReadString('\n')
-			key, salt := crpt.DeriveKey(dhInfo.SharedSecret, nil)
-			textTosend, _ := crpt.Encrypt(key, text)
+			key, salt := deriveKey([]uint64(dhInfo.SharedSecret), nil)
+			textTosend, _ := encrypt(key, text)
 			fmt.Println("enc textToSend:", textTosend)
 			send := Message{textTosend, (salt)}
 			json_data, err := json.Marshal(send)
@@ -214,7 +211,7 @@ func Write() {
 		}
 	}
 }
-func Read() {
+func Read(dhInfo *dh.DHContext) {
 	for {
 		if info.connection != nil {
 
@@ -226,13 +223,77 @@ func Read() {
 			}
 			fmt.Println("i got it")
 
-			key, _ := crpt.DeriveKey(dhInfo.SharedSecret, mes.Salt)
+			key, _ := deriveKey([]uint64(dhInfo.SharedSecret), mes.Salt)
 			fmt.Println("message to ddec", message)
-			messageToRead, _ := crpt.Decrypt(key, mes.Message)
+			messageToRead, _ := decrypt(key, mes.Message)
 			fmt.Println("decr mes", messageToRead)
 			fmt.Println(key)
 			fmt.Println(mes.Salt)
 			fmt.Print(peer.Name + ":" + messageToRead)
 		}
 	}
+}
+
+func encrypt(key []byte, message string) (encmess string, err error) {
+	plainText := []byte(message)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return
+	}
+
+	cipherText := make([]byte, aes.BlockSize+len(plainText))
+	iv := cipherText[:aes.BlockSize]
+	fmt.Println(len(iv))
+
+	if _, err = io.ReadFull(rand.Reader, iv); err != nil {
+		return
+	}
+
+	stream := cipher.NewCFBEncrypter(block, iv)
+	stream.XORKeyStream(cipherText[aes.BlockSize:], plainText)
+
+	encmess = base64.URLEncoding.EncodeToString(cipherText)
+	return
+}
+
+func decrypt(key []byte, securemess string) (decodedmess string, err error) {
+	fmt.Println(securemess)
+
+	cipherText, err := base64.URLEncoding.DecodeString(securemess)
+	fmt.Println("promlem is here")
+	if err != nil {
+		log.Print(err)
+		return
+	}
+	fmt.Println("234567")
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return
+	}
+	fmt.Println("12345")
+	if len(cipherText) < aes.BlockSize {
+		err = errors.New("Ciphertext block size is too short!")
+		return
+	}
+	fmt.Println("sdfg")
+	iv := cipherText[:aes.BlockSize]
+	cipherText = cipherText[aes.BlockSize:]
+
+	stream := cipher.NewCFBDecrypter(block, iv)
+
+	stream.XORKeyStream(cipherText, cipherText)
+
+	decodedmess = string(cipherText)
+	return
+}
+
+func deriveKey(passphrase []uint64, salt []byte) ([]byte, []byte) {
+	if salt == nil {
+		salt = make([]byte, 8)
+		// http://www.ietf.org/rfc/rfc2898.txt
+		// Salt.
+		rand.Read(salt)
+	}
+	return pbkdf2.Key([]byte(bigintegers.ToHex(passphrase)), salt, 1000, 16, sha256.New), salt
 }
