@@ -69,7 +69,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(info.UrPort, info.PortToCon, info, info.Name)
+
 	var dhInfo dh.DHContext
 	var wg sync.WaitGroup
 	fmt.Println("Welcom")
@@ -105,14 +105,15 @@ func SendRequest(wg *sync.WaitGroup, dhInfo *dh.DHContext) {
 	}
 	info.connection = connection
 	data := DataPreparation(dhInfo)
-	fmt.Println([]byte(data + "\n"))
+	fmt.Println("PB", dhInfo.DHParams.PublicKey)
 	connection.Write([]byte(data + "\n"))
 
 	message, _ := bufio.NewReader(connection).ReadString('\n')
 	M := strings.Fields(message)
-	fmt.Println(M)
-	response := []byte(M[0])
-	peerData := []byte(M[1])
+	fmt.Println("M", M)
+	response := []byte(M[0] + " " + M[1] + " " + M[2])
+	fmt.Println("asdf", M[0], M[1], M[2])
+	peerData := []byte(M[3])
 	err := json.Unmarshal(peerData, &peer)
 	if err != nil {
 
@@ -123,9 +124,10 @@ func SendRequest(wg *sync.WaitGroup, dhInfo *dh.DHContext) {
 
 		log.Fatal(err)
 	}
+	fmt.Println("PB", bigintegers.ToHex(dhInfo.DHParams.PublicKey))
 	dhInfo.CalculateSharedSecret()
 	fmt.Println(
-		"\nSharedSecret:", dhInfo.SharedSecret,
+		"\nSharedSecret:", bigintegers.ToHex([]uint64(dhInfo.SharedSecret)),
 	)
 	wg.Done()
 }
@@ -171,22 +173,25 @@ func onConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh.DHContext) { // 
 	wg.Done()
 }
 func DataPreparation(dhInfo *dh.DHContext) string { // Подготовка данных для запроса на подключение
-	dhInfo = dh.NewDHContext()
+	*dhInfo = *dh.NewDHContext()
 	dhInfo.GenerateDHPrivateKey()
 	dhInfo.CalculateDHPublicKey()
-
+	fmt.Println("PB1", dhInfo.PrivateKey)
 	dh := dh.Params{dhInfo.DHParams.G, dhInfo.DHParams.P, dhInfo.DHParams.PublicKey}
 	json_data, err := json.Marshal(dh)
 	if err != nil {
 		log.Fatal(err)
 	}
-	// pr := Peer{info.Name}
-	// json_peerData, err := json.Marshal(pr)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	data := string(json_data)
+	fmt.Println("PB2", dhInfo.PrivateKey)
+	pr := Peer{info.Name}
+	json_peerData, err := json.Marshal(pr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("PB3", dhInfo.PrivateKey)
+	data := string(json_data) + " " + string(json_peerData)
 	fmt.Println(data)
+	fmt.Println("PB4", dhInfo.PrivateKey)
 	return data
 }
 

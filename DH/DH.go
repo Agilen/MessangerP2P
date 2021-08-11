@@ -61,7 +61,10 @@ func (dh *DHContext) CalculateDHPublicKey() {
 	dh.DHParams.PublicKey = PowMod([]uint64(dh.DHParams.G), []uint64(dh.PrivateKey), []uint64(dh.DHParams.P))
 }
 func (dh *DHContext) CalculateSharedSecret() {
-	dh.SharedSecret = PowMod([]uint64(dh.DHParams.PublicKey), []uint64(dh.PrivateKey), []uint64(dh.DHParams.P))
+	fmt.Println(bigintegers.ToHex(dh.DHParams.PublicKey))
+	fmt.Println(bigintegers.ToHex(dh.PrivateKey))
+	fmt.Println(dh.PrivateKey)
+	dh.SharedSecret = PowMod(dh.DHParams.PublicKey, dh.PrivateKey, dh.DHParams.P)
 }
 func GenRandomNum(size int) []uint64 {
 
