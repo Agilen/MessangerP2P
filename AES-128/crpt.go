@@ -11,23 +11,10 @@ import (
 	"io"
 	"log"
 	rand "math/rand"
-	"time"
 
+	bigintegers "github.com/Agilen/MessangerP2P/BigIntegers"
 	"golang.org/x/crypto/pbkdf2"
 )
-
-type DH struct {
-	UrSecret     string
-	SharedSecret string
-	Params       DHParams
-}
-type DHParams struct {
-	PublicSecret string
-	Module       string
-	G            string
-}
-
-var dhInfo DH
 
 func Encrypt(key []byte, message string) (encmess string, err error) {
 	plainText := []byte(message)
@@ -84,27 +71,12 @@ func Decrypt(key []byte, securemess string) (decodedmess string, err error) {
 	return
 }
 
-func DeriveKey(passphrase string, salt []byte) ([]byte, []byte) {
+func DeriveKey(passphrase []uint64, salt []byte) ([]byte, []byte) {
 	if salt == nil {
 		salt = make([]byte, 8)
+		// http://www.ietf.org/rfc/rfc2898.txt
+		// Salt.
 		rand.Read(salt)
 	}
-	return pbkdf2.Key([]byte(passphrase), salt, 1000, 16, sha256.New), salt
-}
-
-func GenRandomNum(size int) []uint64 {
-
-	if size <= 0 {
-		println("Size is bellow zero or zero")
-		log.Fatal()
-	}
-	a := make([]uint64, size)
-	for i := 0; i < size; i++ {
-		s1 := rand.NewSource(time.Now().UnixNano())
-		r1 := rand.New(s1)
-
-		a[i] = r1.Uint64()
-		time.Sleep(100)
-	}
-	return a
+	return pbkdf2.Key([]byte(bigintegers.ToHex(passphrase)), salt, 1000, 16, sha256.New), salt
 }
