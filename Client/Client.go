@@ -157,6 +157,8 @@ func (info *Info) DataPreparation(dhInfo *dh.DHContext) string { // Подгот
 }
 
 func (info *Info) Write(dhInfo *dh.DHContext, feed *DB.Feed) {
+
+	fmt.Print("\n" + feed.GetHistory(info.peer.Port))
 	for {
 		if info.connection != nil {
 

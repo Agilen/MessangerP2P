@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	rand "math/rand"
@@ -26,7 +25,6 @@ func Encrypt(key []byte, message string) (encmess string, err error) {
 
 	cipherText := make([]byte, aes.BlockSize+len(plainText))
 	iv := cipherText[:aes.BlockSize]
-	fmt.Println(len(iv))
 
 	if _, err = io.ReadFull(rn.Reader, iv); err != nil {
 
@@ -41,25 +39,24 @@ func Encrypt(key []byte, message string) (encmess string, err error) {
 }
 
 func Decrypt(key []byte, securemess string) (decodedmess string, err error) {
-	fmt.Println(securemess)
 
 	cipherText, err := base64.URLEncoding.DecodeString(securemess)
-	fmt.Println("promlem is here")
+
 	if err != nil {
 		log.Print(err)
 		return
 	}
-	fmt.Println("234567")
+
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return
 	}
-	fmt.Println("12345")
+
 	if len(cipherText) < aes.BlockSize {
 		err = errors.New("Ciphertext block size is too short!")
 		return
 	}
-	fmt.Println("sdfg")
+
 	iv := cipherText[:aes.BlockSize]
 	cipherText = cipherText[aes.BlockSize:]
 
