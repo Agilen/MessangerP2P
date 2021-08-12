@@ -9,11 +9,15 @@ import (
 	client "github.com/Agilen/MessangerP2P/Client"
 	DB "github.com/Agilen/MessangerP2P/DB"
 	dh "github.com/Agilen/MessangerP2P/DH"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/urfave/cli"
 )
 
 func main() {
-	db, _ := sql.Open("sqlite3", "./ChatHistory.db")
+	db, err := sql.Open("sqlite3", "./ChatHistory.db")
+	if err != nil {
+		log.Fatal(err)
+	}
 	feed := *DB.NewFeed(db)
 	info := *client.NewInfo()
 	var dhInfo dh.DHContext
@@ -29,7 +33,7 @@ func main() {
 		&cli.IntFlag{Destination: &info.PortToCon, Name: "conn", Usage: "port to con"},
 	}
 
-	err := app.Run(os.Args)
+	err = app.Run(os.Args)
 	if err != nil {
 		log.Fatal(err)
 	}

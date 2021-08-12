@@ -1,6 +1,9 @@
 package db
 
-import "database/sql"
+import (
+	"database/sql"
+	"log"
+)
 
 type Feed struct {
 	DB *sql.DB
@@ -11,12 +14,15 @@ type T struct {
 
 // db, _ := sql.Open("sqlite3", "./ChatHistory.db")
 func NewFeed(db *sql.DB) *Feed {
-	stmt, _ := db.Prepare(`CREATE TABLE IF NOT EXISTS "ChatHistory" (
+	stmt, err := db.Prepare(`CREATE TABLE IF NOT EXISTS "ChatHistory" (
 		"ID"	INTEGER NOT NULL UNIQUE,
 		"port"	INTEGER NOT NULL UNIQUE,
 		"chatHistory"	TEXT,
 		PRIMARY KEY("id" AUTOINCREMENT)
 	);`)
+	if err != nil {
+		log.Fatal(err)
+	}
 	stmt.Exec()
 	return &Feed{
 		DB: db,

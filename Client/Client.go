@@ -12,7 +12,6 @@ import (
 	"sync"
 
 	crpt "github.com/Agilen/MessangerP2P/AES-128"
-	bigintegers "github.com/Agilen/MessangerP2P/BigIntegers"
 	DB "github.com/Agilen/MessangerP2P/DB"
 	dh "github.com/Agilen/MessangerP2P/DH"
 )
@@ -24,7 +23,7 @@ type Message struct {
 
 type Peer struct {
 	Name string
-	port int
+	Port int
 }
 
 type Info struct {
@@ -63,7 +62,7 @@ func (info *Info) Listen(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed
 		if err != nil {
 			continue
 		}
-		go info.OnConnection(conn, wg, dhInfo, feed, &info.peer)
+		go info.OnConnection(conn, wg, dhInfo, feed)
 
 	}
 }
@@ -76,14 +75,13 @@ func (info *Info) SendRequest(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB
 	feed.AddNewPort(info.PortToCon)
 	info.connection = connection
 	data := info.DataPreparation(dhInfo)
-	fmt.Println("PB", dhInfo.DHParams.PublicKey)
 	connection.Write([]byte(data + "\n"))
 
 	message, _ := bufio.NewReader(connection).ReadString('\n')
 	M := strings.Fields(message)
-	fmt.Println("M", M)
+
 	response := []byte(M[0] + " " + M[1] + " " + M[2])
-	fmt.Println("asdf", M[0], M[1], M[2])
+
 	peerData := []byte(M[3])
 	err := json.Unmarshal(peerData, &info.peer)
 	if err != nil {
@@ -95,20 +93,19 @@ func (info *Info) SendRequest(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB
 
 		log.Fatal(err)
 	}
-	fmt.Println("PB", bigintegers.ToHex(dhInfo.DHParams.PublicKey))
+
 	dhInfo.CalculateSharedSecret()
-	fmt.Println(
-		"\nSharedSecret:", bigintegers.ToHex([]uint64(dhInfo.SharedSecret)),
-	)
+
 	wg.Done()
 }
-func (info *Info) OnConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed, peer *Peer) { // обработка запроса
+func (info *Info) OnConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) { // обработка запроса
 	fmt.Printf("New connection from: %v", conn.RemoteAddr().String())
 	info.connection = conn
 
 	message, _ := bufio.NewReader(conn).ReadString('\n') //жду запрос
 	M := strings.Fields(message)
 	data := []byte(M[0] + " " + M[1] + " " + M[2])
+
 	peerData := []byte(M[3])
 	err := json.Unmarshal(data, &dhInfo.DHParams)
 	if err != nil {
@@ -120,7 +117,8 @@ func (info *Info) OnConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh.DHC
 
 		log.Fatal(err)
 	}
-	feed.AddNewPort(peer.port)
+
+	feed.AddNewPort(info.peer.Port)
 	dhInfo.GenerateDHPrivateKey()
 	dhInfo.CalculateSharedSecret()
 	dhInfo.CalculateDHPublicKey()
@@ -138,9 +136,6 @@ func (info *Info) OnConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh.DHC
 	response := string(json_data) + " " + string(json_peerData)
 	conn.Write([]byte(response + "\n"))
 
-	fmt.Println(
-		"\nSharedSecret:", bigintegers.ToHex([]uint64(dhInfo.SharedSecret)),
-	)
 	wg.Done()
 }
 func (info *Info) DataPreparation(dhInfo *dh.DHContext) string { // Подготовка данных для запроса на подключение
@@ -169,8 +164,8 @@ func (info *Info) Write(dhInfo *dh.DHContext, feed *DB.Feed) {
 			text, _ := reader.ReadString('\n')
 			key, salt := crpt.DeriveKey([]uint64(dhInfo.SharedSecret), nil)
 			textTosend, _ := crpt.Encrypt(key, text)
-			fmt.Println("enc textToSend:", textTosend)
-			feed.EditChatHistory(info.PortToCon, info.Name+":"+textTosend+"\n")
+
+			feed.EditChatHistory(info.peer.Port, info.Name+":"+text)
 			send := Message{textTosend, (salt)}
 			json_data, err := json.Marshal(send)
 			if err != nil {
@@ -192,7 +187,7 @@ func (info *Info) Read(dhInfo *dh.DHContext, feed *DB.Feed) {
 			}
 			key, _ := crpt.DeriveKey([]uint64(dhInfo.SharedSecret), info.message.Salt)
 			messageToRead, _ := crpt.Decrypt(key, info.message.Message)
-			feed.EditChatHistory(info.PortToCon, info.peer.Name+":"+messageToRead)
+			feed.EditChatHistory(info.peer.Port, info.peer.Name+":"+messageToRead)
 			fmt.Print(info.peer.Name + ":" + messageToRead)
 		}
 	}
