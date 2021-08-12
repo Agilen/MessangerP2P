@@ -44,6 +44,7 @@ func (st *Params) UnmarshalJSON(by []byte) error {
 
 	return err
 }
+
 func NewDHContext() *DHContext {
 	context := &DHContext{
 		DHParams: Params{
