@@ -26,7 +26,7 @@ type Peer struct {
 	Port int
 }
 
-type Info struct {
+type Messanger struct {
 	Name       string
 	UrPort     int
 	PortToCon  int
@@ -35,46 +35,47 @@ type Info struct {
 	connection net.Conn
 }
 
-func NewInfo() *Info {
-	info := &Info{
+func NewMessanger() *Messanger {
+	mes := &Messanger{
 		Name:   "Anon",
 		UrPort: 8000,
 	}
-	return info
+	return mes
 }
 
-func (info *Info) Start(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) {
+func (mes *Messanger) Start(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) {
 	fmt.Println("Welcom")
 	wg.Add(1)
-	go info.Listen(wg, dhInfo, feed)
-	if info.PortToCon != 0 {
-		go info.SendRequest(wg, dhInfo, feed)
+	go mes.Listen(wg, dhInfo, feed)
+	if mes.PortToCon != 0 {
+		go mes.SendRequest(wg, dhInfo, feed)
 	}
 	wg.Wait()
-	go info.Write(dhInfo, feed)
-	info.Read(dhInfo, feed)
+	go mes.Write(dhInfo, feed)
+	mes.Read(dhInfo, feed)
+
 }
-func (info *Info) Listen(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) {
-	listener, _ := net.Listen("tcp", ":"+strconv.Itoa(info.UrPort))
+func (mes *Messanger) Listen(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) {
+	listener, _ := net.Listen("tcp", ":"+strconv.Itoa(mes.UrPort))
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			continue
 		}
-		go info.OnConnection(conn, wg, dhInfo, feed)
+		go mes.OnConnection(conn, wg, dhInfo, feed)
 
 	}
 }
-func (info *Info) SendRequest(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) {
+func (mes *Messanger) SendRequest(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) {
 
-	connection, _ := net.Dial("tcp", ":"+strconv.Itoa(info.PortToCon))
+	connection, _ := net.Dial("tcp", ":"+strconv.Itoa(mes.PortToCon))
 	for connection == nil {
-		connection, _ = net.Dial("tcp", ":"+strconv.Itoa(info.PortToCon))
+		connection, _ = net.Dial("tcp", ":"+strconv.Itoa(mes.PortToCon))
 	}
-	feed.AddNewPort(info.PortToCon)
-	info.connection = connection
-	data := info.DataPreparation(dhInfo)
+	feed.AddNewPort(mes.PortToCon)
+	mes.connection = connection
+	data := mes.DataPreparation(dhInfo)
 	connection.Write([]byte(data + "\n"))
 
 	message, _ := bufio.NewReader(connection).ReadString('\n')
@@ -83,7 +84,7 @@ func (info *Info) SendRequest(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB
 	response := []byte(M[0] + " " + M[1] + " " + M[2])
 
 	peerData := []byte(M[3])
-	err := json.Unmarshal(peerData, &info.peer)
+	err := json.Unmarshal(peerData, &mes.peer)
 	if err != nil {
 
 		log.Fatal(err)
@@ -98,9 +99,9 @@ func (info *Info) SendRequest(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB
 
 	wg.Done()
 }
-func (info *Info) OnConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) { // обработка запроса
+func (mes *Messanger) OnConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) { // обработка запроса
 	fmt.Printf("New connection from: %v", conn.RemoteAddr().String())
-	info.connection = conn
+	mes.connection = conn
 
 	message, _ := bufio.NewReader(conn).ReadString('\n') //жду запрос
 	M := strings.Fields(message)
@@ -112,13 +113,13 @@ func (info *Info) OnConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh.DHC
 
 		log.Fatal(err)
 	}
-	err = json.Unmarshal(peerData, &info.peer)
+	err = json.Unmarshal(peerData, &mes.peer)
 	if err != nil {
 
 		log.Fatal(err)
 	}
 
-	feed.AddNewPort(info.peer.Port)
+	feed.AddNewPort(mes.peer.Port)
 	dhInfo.GenerateDHPrivateKey()
 	dhInfo.CalculateSharedSecret()
 	dhInfo.CalculateDHPublicKey()
@@ -128,7 +129,7 @@ func (info *Info) OnConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh.DHC
 	if err != nil {
 		log.Fatal(err)
 	}
-	pr := Peer{info.Name, info.UrPort}
+	pr := Peer{mes.Name, mes.UrPort}
 	json_peerData, err := json.Marshal(pr)
 	if err != nil {
 		log.Fatal(err)
@@ -138,7 +139,7 @@ func (info *Info) OnConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh.DHC
 
 	wg.Done()
 }
-func (info *Info) DataPreparation(dhInfo *dh.DHContext) string { // Подготовка данных для запроса на подключение
+func (mes *Messanger) DataPreparation(dhInfo *dh.DHContext) string { // Подготовка данных для запроса на подключение
 	*dhInfo = *dh.NewDHContext()
 	dhInfo.GenerateDHPrivateKey()
 	dhInfo.CalculateDHPublicKey()
@@ -147,7 +148,7 @@ func (info *Info) DataPreparation(dhInfo *dh.DHContext) string { // Подгот
 	if err != nil {
 		log.Fatal(err)
 	}
-	pr := Peer{info.Name, info.UrPort}
+	pr := Peer{mes.Name, mes.UrPort}
 	json_peerData, err := json.Marshal(pr)
 	if err != nil {
 		log.Fatal(err)
@@ -155,42 +156,102 @@ func (info *Info) DataPreparation(dhInfo *dh.DHContext) string { // Подгот
 	data := string(json_data) + " " + string(json_peerData)
 	return data
 }
+func (mes *Messanger) Write(dhInfo *dh.DHContext, feed *DB.Feed) {
 
-func (info *Info) Write(dhInfo *dh.DHContext, feed *DB.Feed) {
-
-	fmt.Print("\n" + feed.GetHistory(info.peer.Port))
+	fmt.Print("\n" + feed.GetHistory(mes.peer.Port))
 	for {
-		if info.connection != nil {
+		if mes.connection != nil {
 
 			reader := bufio.NewReader(os.Stdin)
 			text, _ := reader.ReadString('\n')
+			mes.Commands(text)
 			key, salt := crpt.DeriveKey([]uint64(dhInfo.SharedSecret), nil)
 			textTosend, _ := crpt.Encrypt(key, text)
 
-			feed.EditChatHistory(info.peer.Port, info.Name+":"+text)
+			feed.EditChatHistory(mes.peer.Port, mes.Name+":"+text)
 			send := Message{textTosend, (salt)}
 			json_data, err := json.Marshal(send)
 			if err != nil {
 				log.Fatal(err)
 			}
-			info.connection.Write([]byte(string(json_data) + "\n"))
+			mes.connection.Write([]byte(string(json_data) + "\n"))
 		}
 	}
 }
-func (info *Info) Read(dhInfo *dh.DHContext, feed *DB.Feed) {
+func (mes *Messanger) Read(dhInfo *dh.DHContext, feed *DB.Feed) {
 	for {
-		if info.connection != nil {
+		if mes.connection != nil {
 
-			message, _ := bufio.NewReader(info.connection).ReadString('\n')
-			err := json.Unmarshal([]byte(message), &info.message)
+			message, _ := bufio.NewReader(mes.connection).ReadString('\n')
+			err := json.Unmarshal([]byte(message), &mes.message)
 			if err != nil {
 
 				log.Fatal(err)
 			}
-			key, _ := crpt.DeriveKey([]uint64(dhInfo.SharedSecret), info.message.Salt)
-			messageToRead, _ := crpt.Decrypt(key, info.message.Message)
-			feed.EditChatHistory(info.peer.Port, info.peer.Name+":"+messageToRead)
-			fmt.Print(info.peer.Name + ":" + messageToRead)
+			key, _ := crpt.DeriveKey([]uint64(dhInfo.SharedSecret), mes.message.Salt)
+			messageToRead, _ := crpt.Decrypt(key, mes.message.Message)
+			feed.EditChatHistory(mes.peer.Port, mes.peer.Name+":"+messageToRead)
+			fmt.Print(mes.peer.Name + ":" + messageToRead)
 		}
 	}
+}
+func (mes *Messanger) Commands(str string) bool {
+	str = strings.TrimSpace(str)
+	str = strings.Trim(str, "\n")
+	if str[0:1] != "/" {
+		return false
+	}
+	str = str[1:2]
+	switch str {
+	case "g":
+		{
+			return true
+		}
+	case "e":
+		{
+			os.Exit(0)
+		}
+	case "p":
+		{
+			str = strings.TrimSpace(str[2:])
+			if len(str) > 5 || len(str) == 0 {
+				fmt.Println("Incorect input")
+			} else {
+				port, err := strconv.Atoi(str)
+				if err != nil {
+					fmt.Println("Some problem with value")
+				}
+				mes.UrPort = port
+			}
+
+		}
+	case "n":
+		{
+			str = strings.TrimSpace(str[2:])
+			if len(str) == 0 {
+				fmt.Println("Space is not nickname")
+			} else {
+				mes.Name = str
+			}
+		}
+	case "j":
+		{
+			str = strings.TrimSpace(str[2:])
+			if len(str) > 5 || len(str) == 0 {
+				fmt.Println("Incorect input")
+			} else {
+				port, err := strconv.Atoi(str)
+				if err != nil {
+					fmt.Println("Some problem with value")
+				}
+				mes.PortToCon = port
+
+			}
+		}
+	default:
+		{
+			fmt.Println("ia ne znau chto eto")
+		}
+	}
+	return false
 }

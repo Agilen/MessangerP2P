@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"database/sql"
 	"log"
 	"os"
@@ -19,7 +20,7 @@ func main() {
 		log.Fatal(err)
 	}
 	feed := *DB.NewFeed(db)
-	info := *client.NewInfo()
+	mes := *client.NewMessanger()
 	var dhInfo dh.DHContext
 	var wg sync.WaitGroup
 	app := cli.NewApp() // &cli.App{}
@@ -28,9 +29,9 @@ func main() {
 	app.Description = "help urself"
 
 	app.Flags = []cli.Flag{
-		&cli.StringFlag{Destination: &info.Name, Name: "name", Value: "Anon", Usage: "It is your nickname"},
-		&cli.IntFlag{Destination: &info.UrPort, Name: "port", Usage: "ur port"},
-		&cli.IntFlag{Destination: &info.PortToCon, Name: "conn", Usage: "port to con"},
+		&cli.StringFlag{Destination: &mes.Name, Name: "name", Value: "Anon", Usage: "It is your nickname"},
+		&cli.IntFlag{Destination: &mes.UrPort, Name: "port", Usage: "ur port"},
+		&cli.IntFlag{Destination: &mes.PortToCon, Name: "conn", Usage: "port to con"},
 	}
 
 	err = app.Run(os.Args)
@@ -38,5 +39,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	info.Start(&wg, &dhInfo, &feed)
+	for {
+		reader := bufio.NewReader(os.Stdin)
+		text, _ := reader.ReadString('\n')
+		flag := mes.Commands(text)
+		if flag {
+			break
+		}
+	}
+
+	mes.Start(&wg, &dhInfo, &feed)
 }
