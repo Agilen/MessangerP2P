@@ -71,7 +71,7 @@ func (feed *Feed) EditChatHistory(port int, chat string) {
 }
 func (feed *Feed) GetHistory() string {
 	var T Text
-	fmt.Println("ID", feed.id)
+
 	Tex := feed.DB.QueryRow("select chatHistory from ChatHistory where clientId=$1 ", feed.id)
 	Tex.Scan(&T.chatHistory)
 	return T.chatHistory
