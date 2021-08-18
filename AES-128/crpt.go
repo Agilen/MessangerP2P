@@ -15,6 +15,7 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 )
 
+//Encrypt text
 func Encrypt(key []byte, message string) (encmess string, err error) {
 	plainText := []byte(message)
 
@@ -38,6 +39,7 @@ func Encrypt(key []byte, message string) (encmess string, err error) {
 	return
 }
 
+//Decrypt text
 func Decrypt(key []byte, securemess string) (decodedmess string, err error) {
 
 	cipherText, err := base64.URLEncoding.DecodeString(securemess)
@@ -68,6 +70,7 @@ func Decrypt(key []byte, securemess string) (decodedmess string, err error) {
 	return
 }
 
+//Generate key for cipher feedback mode
 func DeriveKey(passphrase []uint64, salt []byte) ([]byte, []byte) {
 	if salt == nil {
 		salt = make([]byte, 8)

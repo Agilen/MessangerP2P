@@ -24,6 +24,7 @@ type Params struct {
 	PublicKey BigInteger
 }
 
+// BigInteger is mine type and Json can not un/marshal it, so i creat un/marshaler for this
 func (st Params) MarshalJSON() ([]byte, error) {
 	A := bigintegers.ToHex([]uint64(st.G))
 	B := bigintegers.ToHex([]uint64(st.P))
@@ -53,6 +54,7 @@ func NewDHContext() *DHContext {
 
 	return context
 }
+
 func (dh *DHContext) GenerateDHPrivateKey() {
 	dh.PrivateKey = GenRandomNum(2)
 }
@@ -63,6 +65,8 @@ func (dh *DHContext) CalculateSharedSecret() {
 
 	dh.SharedSecret = PowMod(dh.DHParams.PublicKey, dh.PrivateKey, dh.DHParams.P)
 }
+
+//generate random big number with size n,there n is 64 bit
 func GenRandomNum(size int) []uint64 {
 
 	if size <= 0 {

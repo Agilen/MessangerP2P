@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 )
 
@@ -14,6 +13,7 @@ type Text struct {
 	chatHistory string
 }
 
+//Here i creat 2 table for DB in Client i will collect data about previous connections and in ChatHistory will contain message history
 func NewFeed(db *sql.DB) *Feed {
 	stmt, err := db.Prepare(`
 
@@ -47,16 +47,8 @@ func NewFeed(db *sql.DB) *Feed {
 		DB: db,
 	}
 }
-func (feed *Feed) AddNew(port int) {
-	fmt.Println("hi1")
-	stmt, err := feed.DB.Prepare(`INSERT INTO Client (ip,port,nickname) values(?,?,?)`)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println("hi2")
-	stmt.Exec(port)
 
-}
+//Add the address of a new client to the database
 func (feed *Feed) AddNewAdr(ip string, port int, name string) {
 	feed.DB.Exec("INSERT INTO Client (ip, port, nickname) values($1,$2,$3)", ip, port, name)
 
@@ -64,11 +56,15 @@ func (feed *Feed) AddNewAdr(ip string, port int, name string) {
 	ID.Scan(&feed.id)
 	feed.DB.Exec("INSERT INTO ChatHistory (clientId) values($1)", feed.id)
 }
+
+//Edit chat history
 func (feed *Feed) EditChatHistory(port int, chat string) {
 	text := feed.GetHistory()
 	text = text + chat
 	feed.DB.Exec("update ChatHistory set chatHistory=$1 where clientId=$2 ", text, feed.id)
 }
+
+//Get chat history from DB
 func (feed *Feed) GetHistory() string {
 	var T Text
 

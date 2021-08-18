@@ -43,6 +43,7 @@ func NewMessanger() *Messanger {
 	return mes
 }
 
+// Start messanger
 func (mes *Messanger) Start(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) {
 	fmt.Println("Welcom")
 	wg.Add(1)
@@ -55,6 +56,8 @@ func (mes *Messanger) Start(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.F
 	mes.Read(dhInfo, feed)
 
 }
+
+//Listen for new connection
 func (mes *Messanger) Listen(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) {
 	listener, _ := net.Listen("tcp", ":"+strconv.Itoa(mes.UrPort))
 
@@ -67,6 +70,8 @@ func (mes *Messanger) Listen(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.
 
 	}
 }
+
+//Send request to make connection and send info to init DH(Diffie Hellman)
 func (mes *Messanger) SendRequest(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) {
 
 	connection, _ := net.Dial("tcp", ":"+strconv.Itoa(mes.PortToCon))
@@ -100,6 +105,8 @@ func (mes *Messanger) SendRequest(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed
 
 	wg.Done()
 }
+
+//Processes the connection request
 func (mes *Messanger) OnConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh.DHContext, feed *DB.Feed) { // обработка запроса
 	fmt.Printf("New connection from: %v", conn.RemoteAddr().String())
 	mes.connection = conn
@@ -140,6 +147,8 @@ func (mes *Messanger) OnConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh
 
 	wg.Done()
 }
+
+//Prepares data for request
 func (mes *Messanger) DataPreparation(dhInfo *dh.DHContext) string { // Подготовка данных для запроса на подключение
 	*dhInfo = *dh.NewDHContext()
 	dhInfo.GenerateDHPrivateKey()
@@ -157,6 +166,8 @@ func (mes *Messanger) DataPreparation(dhInfo *dh.DHContext) string { // Подг
 	data := string(json_data) + " " + string(json_peerData)
 	return data
 }
+
+//Read the line, encrypt the message and send it
 func (mes *Messanger) Write(dhInfo *dh.DHContext, feed *DB.Feed) {
 
 	fmt.Print("\n" + feed.GetHistory())
@@ -179,6 +190,8 @@ func (mes *Messanger) Write(dhInfo *dh.DHContext, feed *DB.Feed) {
 		}
 	}
 }
+
+//Waiting for message, later it decrypt it and write it in console
 func (mes *Messanger) Read(dhInfo *dh.DHContext, feed *DB.Feed) {
 	for {
 		if mes.connection != nil {
