@@ -73,8 +73,9 @@ func (mes *Messanger) SendRequest(wg *sync.WaitGroup, dhInfo *dh.DHContext, feed
 	for connection == nil {
 		connection, _ = net.Dial("tcp", ":"+strconv.Itoa(mes.PortToCon))
 	}
-	feed.AddNewPort(mes.PortToCon)
+	feed.AddNewAdr("127.0.0.1", mes.peer.Port, mes.peer.Name)
 	mes.connection = connection
+	fmt.Printf("New connection from: %v", connection.RemoteAddr().String())
 	data := mes.DataPreparation(dhInfo)
 	connection.Write([]byte(data + "\n"))
 
@@ -119,7 +120,7 @@ func (mes *Messanger) OnConnection(conn net.Conn, wg *sync.WaitGroup, dhInfo *dh
 		log.Fatal(err)
 	}
 
-	feed.AddNewPort(mes.peer.Port)
+	feed.AddNewAdr("127.0.0.1", mes.peer.Port, mes.peer.Name)
 	dhInfo.GenerateDHPrivateKey()
 	dhInfo.CalculateSharedSecret()
 	dhInfo.CalculateDHPublicKey()
@@ -158,7 +159,7 @@ func (mes *Messanger) DataPreparation(dhInfo *dh.DHContext) string { // Подг
 }
 func (mes *Messanger) Write(dhInfo *dh.DHContext, feed *DB.Feed) {
 
-	fmt.Print("\n" + feed.GetHistory(mes.peer.Port))
+	fmt.Print("\n" + feed.GetHistory())
 	for {
 		if mes.connection != nil {
 
@@ -241,11 +242,14 @@ func (mes *Messanger) Commands(str string) bool {
 				fmt.Println("Incorect input")
 			} else {
 				port, err := strconv.Atoi(str)
-				if err != nil {
-					fmt.Println("Some problem with value")
+				if port < 2000 || port > 65534 {
+					fmt.Println("Incorect input")
+				} else {
+					if err != nil {
+						fmt.Println("Some problem with value")
+					}
+					mes.PortToCon = port
 				}
-				mes.PortToCon = port
-
 			}
 		}
 	default:
